@@ -14,7 +14,7 @@ pub enum SystemError {
     NonceOveflow,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Pallet<T: Config> {
     block_number: T::BlockNumber,
     nonce: BTreeMap<T::AccountId, T::Nonce>,

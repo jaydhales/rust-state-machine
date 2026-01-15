@@ -1,16 +1,28 @@
 use num::traits::{CheckedAdd, CheckedSub, Zero};
 use std::collections::BTreeMap;
 
-pub enum BalanceError<AccountId> {
+use crate::support::Dispatch;
+
+#[derive(Debug)]
+pub enum BalanceError<T: Config> {
     InsufficientBalance,
-    BalanceOverflow(AccountId),
+    BalanceOverflow(T::AccountId),
+}
+
+impl<T: Config> BalanceError<T> {
+    pub fn format(&self) -> &'static str {
+        match self {
+            BalanceError::InsufficientBalance => "Insufficient Balance",
+            BalanceError::BalanceOverflow(x) => "Balance Overflow",
+        }
+    }
 }
 
 pub trait Config: crate::system::Config {
     type Balance: Zero + CheckedSub + CheckedAdd + Copy;
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Pallet<T: Config> {
     balances: BTreeMap<T::AccountId, T::Balance>,
 }
@@ -35,7 +47,7 @@ impl<T: Config> Pallet<T> {
         caller: &T::AccountId,
         to: &T::AccountId,
         amount: &T::Balance,
-    ) -> Result<(), BalanceError<T::AccountId>> {
+    ) -> Result<(), BalanceError<T>> {
         let mut caller_balance = self.balance(caller);
         let mut to_balance = self.balance(to);
 
@@ -51,6 +63,31 @@ impl<T: Config> Pallet<T> {
         self.set_balance(&to, to_balance);
 
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum Call<T: Config> {
+    Transfer {
+        to: T::AccountId,
+        amount: T::Balance,
+    },
+}
+
+impl<T: Config> Dispatch for Pallet<T> {
+    type Caller = T::AccountId;
+    type Call = Call<T>;
+
+    fn dispatch(
+        &mut self,
+        caller: Self::Caller,
+        call: Self::Call,
+    ) -> crate::support::DispatchResult {
+        match call {
+            Call::Transfer { to, amount } => {
+                self.transfer(&caller, &to, &amount).map_err(|e| e.format())
+            }
+        }
     }
 }
 

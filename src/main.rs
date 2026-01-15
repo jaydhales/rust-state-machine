@@ -1,22 +1,46 @@
+use crate::{
+    balances::Call,
+    support::Dispatch,
+    types::{AccountId, Balance, Block, BlockNumber, Extrinsic, Header, Nonce},
+};
+
 mod balances;
+mod support;
 mod system;
 
+mod types {
+    use crate::{RuntimeCall, support};
+
+    pub type AccountId = String;
+    pub type Balance = u128;
+    pub type BlockNumber = u32;
+    pub type Nonce = u32;
+    pub type Extrinsic = support::Extrinsic<AccountId, RuntimeCall>;
+    pub type Header = support::Header<BlockNumber>;
+    pub type Block = support::Block<Header, Extrinsic>;
+}
+
+#[derive(Clone, Debug)]
+pub enum RuntimeCall {
+    Balances(balances::Call<Runtime>),
+}
+
 // This is our main Runtime.
-// It accumulates all of the different pallets we want to use.
-#[derive(Debug)]
+// It accumulates all the different pallets we want to use.
+#[derive(Clone, Debug)]
 pub struct Runtime {
     system: system::Pallet<Runtime>,
     balances: balances::Pallet<Runtime>,
 }
 
 impl crate::system::Config for Runtime {
-    type AccountId = String;
-    type BlockNumber = u32;
-    type Nonce = u64;
+    type AccountId = AccountId;
+    type BlockNumber = BlockNumber;
+    type Nonce = Nonce;
 }
 
 impl crate::balances::Config for Runtime {
-    type Balance = u128;
+    type Balance = Balance;
 }
 
 impl Runtime {
@@ -27,42 +51,90 @@ impl Runtime {
             balances: balances::Pallet::new(),
         }
     }
+
+    fn execute_block(&mut self, block: types::Block) -> support::DispatchResult {
+        self.system.inc_block_number();
+        if block.header.block_number != self.system.block_number() {
+            return Err("block number does not match what is expected");
+        };
+        for (i, Extrinsic { caller, call }) in block.extrinsics.into_iter().enumerate() {
+            self.system.inc_nonce(&caller);
+            let _ = self.dispatch(caller, call).map_err(|e| {
+                eprintln!(
+                    "Extrinsic Error\n\tBlock Number: {}\n\tExtrinsic Number: {}\n\tError: {}",
+                    block.header.block_number, i, e
+                )
+            });
+        }
+
+        Ok(())
+    }
+}
+
+impl crate::support::Dispatch for Runtime {
+    type Caller = <Runtime as system::Config>::AccountId;
+    type Call = RuntimeCall;
+    // Dispatch a call on behalf of a caller. Increments the caller's nonce.
+    //
+    // Dispatch allows us to identify which underlying module call we want to execute.
+    // Note that we extract the `caller` from the extrinsic, and use that information
+    // to determine who we are executing the call on behalf of.
+    fn dispatch(
+        &mut self,
+        caller: Self::Caller,
+        runtime_call: Self::Call,
+    ) -> support::DispatchResult {
+        match runtime_call {
+            RuntimeCall::Balances(call) => self.balances.dispatch(caller, call),
+        }
+    }
 }
 
 fn main() {
-    /* TODO: Create a mutable variable `runtime`, which is a new instance of `Runtime`. */
     let mut runtime = Runtime::new();
-    /* TODO: Set the balance of `alice` to 100, allowing us to execute other transactions. */
+
     let alice = String::from("alice");
     let bob = String::from("bob");
     let charlie = String::from("charlie");
     runtime.balances.set_balance(&alice, 100);
 
-    // start emulating a block
-    /* TODO: Increment the block number in system. */
-    runtime.system.inc_block_number();
-    /* TODO: Assert the block number is what we expect. */
-    assert_eq!(runtime.system.block_number(), 1);
+    let current_block = runtime.system.block_number();
+    let e_0 = Extrinsic {
+        caller: alice.clone(),
+        call: RuntimeCall::Balances(Call::Transfer {
+            to: bob,
+            amount: 30,
+        }),
+    };
 
-    // first transaction
-    /* TODO: Increment the nonce of `alice`. */
-    runtime.system.inc_nonce(&alice);
-    /* TODO: Execute a transfer from `alice` to `bob` for 30 tokens.
-        - The transfer _could_ return an error. We should use `map_err` to print
-          the error if there is one.
-        - We should capture the result of the transfer in an unused variable like `_res`.
-    */
-    let _res = runtime.balances.transfer(&alice, &bob, &30).map_err(|e| e);
+    let e_1 = Extrinsic {
+        caller: alice.clone(),
+        call: RuntimeCall::Balances(Call::Transfer {
+            to: charlie.clone(),
+            amount: 30,
+        }),
+    };
 
-    // second transaction
-    /* TODO: Increment the nonce of `alice` again. */
-    runtime.system.inc_nonce(&alice);
+    let e_2 = Extrinsic {
+        caller: alice.clone(),
+        call: RuntimeCall::Balances(Call::Transfer {
+            to: charlie,
+            amount: 50,
+        }),
+    };
 
-    /* TODO: Execute another balance transfer, this time from `alice` to `charlie` for 20. */
-    let _res = runtime
-        .balances
-        .transfer(&alice, &charlie, &20)
-        .map_err(|e| e);
+    let new_block = Block {
+        header: Header {
+            block_number: current_block + 1,
+        },
+        extrinsics: vec![e_0, e_1, e_2],
+    };
+
+    println!("Block: {:?}", new_block);
+
+    let _ = runtime
+        .execute_block(new_block)
+        .map_err(|e| eprintln!("{e}"));
 
     println!("Runtime: {:?}", runtime);
 }
