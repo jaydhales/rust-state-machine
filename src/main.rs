@@ -1,10 +1,10 @@
 use crate::{
-    balances::Call,
-    support::Dispatch,
     types::{AccountId, Balance, Block, BlockNumber, Extrinsic, Header, Nonce},
 };
+use crate::support::Dispatch;
 
 mod balances;
+mod proof_of_existence;
 mod support;
 mod system;
 
@@ -18,11 +18,13 @@ mod types {
     pub type Extrinsic = support::Extrinsic<AccountId, RuntimeCall>;
     pub type Header = support::Header<BlockNumber>;
     pub type Block = support::Block<Header, Extrinsic>;
+    pub type Content = String;
 }
 
 #[derive(Clone, Debug)]
 pub enum RuntimeCall {
     Balances(balances::Call<Runtime>),
+    ProofOfExistence(proof_of_existence::Call<Runtime>),
 }
 
 // This is our main Runtime.
@@ -31,16 +33,21 @@ pub enum RuntimeCall {
 pub struct Runtime {
     system: system::Pallet<Runtime>,
     balances: balances::Pallet<Runtime>,
+    proof_of_existence: proof_of_existence::Pallet<Runtime>,
 }
 
-impl crate::system::Config for Runtime {
+impl system::Config for Runtime {
     type AccountId = AccountId;
     type BlockNumber = BlockNumber;
     type Nonce = Nonce;
 }
 
-impl crate::balances::Config for Runtime {
+impl balances::Config for Runtime {
     type Balance = Balance;
+}
+
+impl proof_of_existence::Config for Runtime {
+    type Content = String;
 }
 
 impl Runtime {
@@ -49,6 +56,7 @@ impl Runtime {
         Self {
             system: system::Pallet::new(),
             balances: balances::Pallet::new(),
+            proof_of_existence: proof_of_existence::Pallet::new()
         }
     }
 
@@ -71,7 +79,7 @@ impl Runtime {
     }
 }
 
-impl crate::support::Dispatch for Runtime {
+impl support::Dispatch for Runtime {
     type Caller = <Runtime as system::Config>::AccountId;
     type Call = RuntimeCall;
     // Dispatch a call on behalf of a caller. Increments the caller's nonce.
@@ -86,6 +94,7 @@ impl crate::support::Dispatch for Runtime {
     ) -> support::DispatchResult {
         match runtime_call {
             RuntimeCall::Balances(call) => self.balances.dispatch(caller, call),
+            RuntimeCall::ProofOfExistence(call) => self.proof_of_existence.dispatch(caller, call)
         }
     }
 }
@@ -101,7 +110,7 @@ fn main() {
     let current_block = runtime.system.block_number();
     let e_0 = Extrinsic {
         caller: alice.clone(),
-        call: RuntimeCall::Balances(Call::Transfer {
+        call: RuntimeCall::Balances(balances::Call::Transfer {
             to: bob,
             amount: 30,
         }),
@@ -109,7 +118,7 @@ fn main() {
 
     let e_1 = Extrinsic {
         caller: alice.clone(),
-        call: RuntimeCall::Balances(Call::Transfer {
+        call: RuntimeCall::Balances(balances::Call::Transfer {
             to: charlie.clone(),
             amount: 30,
         }),
@@ -117,7 +126,7 @@ fn main() {
 
     let e_2 = Extrinsic {
         caller: alice.clone(),
-        call: RuntimeCall::Balances(Call::Transfer {
+        call: RuntimeCall::Balances(balances::Call::Transfer {
             to: charlie,
             amount: 50,
         }),
