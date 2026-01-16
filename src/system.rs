@@ -11,7 +11,7 @@ pub trait Config {
 
 pub enum SystemError {
     BlockOverflow,
-    NonceOveflow,
+    NonceOverflow,
 }
 
 #[derive(Clone, Debug)]

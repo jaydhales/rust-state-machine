@@ -60,7 +60,7 @@ impl Runtime {
         }
     }
 
-    fn execute_block(&mut self, block: types::Block) -> support::DispatchResult {
+    fn execute_block(&mut self, block: Block) -> support::DispatchResult {
         self.system.inc_block_number();
         if block.header.block_number != self.system.block_number() {
             return Err("block number does not match what is expected");
@@ -108,38 +108,49 @@ fn main() {
     runtime.balances.set_balance(&alice, 100);
 
     let current_block = runtime.system.block_number();
-    let e_0 = Extrinsic {
-        caller: alice.clone(),
-        call: RuntimeCall::Balances(balances::Call::Transfer {
-            to: bob,
-            amount: 30,
-        }),
-    };
 
-    let e_1 = Extrinsic {
-        caller: alice.clone(),
-        call: RuntimeCall::Balances(balances::Call::Transfer {
-            to: charlie.clone(),
-            amount: 30,
-        }),
-    };
-
-    let e_2 = Extrinsic {
-        caller: alice.clone(),
-        call: RuntimeCall::Balances(balances::Call::Transfer {
-            to: charlie,
-            amount: 50,
-        }),
-    };
 
     let new_block = Block {
         header: Header {
             block_number: current_block + 1,
         },
-        extrinsics: vec![e_0, e_1, e_2],
+        extrinsics: vec![ Extrinsic {
+            caller: alice.clone(),
+            call: RuntimeCall::Balances(balances::Call::Transfer {
+                to: bob,
+                amount: 30,
+            }),
+        }, Extrinsic {
+            caller: alice.clone(),
+            call: RuntimeCall::Balances(balances::Call::Transfer {
+                to: charlie.clone(),
+                amount: 30,
+            }),
+        }],
     };
 
-    println!("Block: {:?}", new_block);
+    println!("Block 1: {:?}", new_block);
+
+    let _ = runtime
+        .execute_block(new_block)
+        .map_err(|e| eprintln!("{e}"));
+
+    let current_block = runtime.system.block_number();
+    let new_block = Block {
+        header: Header {
+            block_number: current_block + 1,
+        },
+        extrinsics: vec![
+            Extrinsic {
+                caller: charlie.clone(),
+                call: RuntimeCall::ProofOfExistence(proof_of_existence::Call::CreateClaim {
+                    claim: String::from("I did that")
+                })
+            }
+        ],
+    };
+
+    println!("Block 2: {:?}", new_block);
 
     let _ = runtime
         .execute_block(new_block)
@@ -147,3 +158,4 @@ fn main() {
 
     println!("Runtime: {:?}", runtime);
 }
+
